@@ -1,7 +1,6 @@
-
 # pydoublelasso
 
-A Python package for estimating treatment effects using the Double Post-Lasso procedure from Belloni, Chernozhukov, and Hansen (2014): *"Inference on Treatment Effects after Selection among High-Dimensional Controls."* This method is designed for valid inference in the presence of many covariates, using Lasso for model selection followed by OLS for estimation.
+A Python package for estimating treatment effects using the Double Post-Lasso procedure from Belloni, Chernozhukov, and Hansen (2014). This method is designed for valid inference in the presence of many covariates, using Lasso for model selection followed by OLS for estimation.
 
 ## Installation
 
@@ -24,70 +23,60 @@ pip install pydoublelasso
 
 ```python
 import pandas as pd
-from pydoublelasso import DoubleLasso
+import numpy as np
+from pydoublelasso import DoublePostLasso
 
-# Simulated data
-df = pd.read_csv("your_data.csv")
+# Generate synthetic data
+np.random.seed(1988)
+n_obs, n_features = 1000, 50
 
-# Columns:
-# 'Y' = outcome
-# 'D' = treatment (binary or continuous)
-# other columns = potential controls
-
-# Set up model
-X = df.drop(columns=['Y', 'D'])
-y = df['Y']
-d = df['D']
+# Generate covariates
+X = np.random.randn(n, p)
+D = X[:, 0] + 0.5 * X[:, 1] + np.random.randn(n) * 0.5  # Treatment depends on X0, X1
+Y = 2 * D + X[:, 2] + np.random.randn(n) * 0.5  # Outcome depends on D and X2
 
 # Run Double Post-Lasso
-dlasso = DoubleLasso()
-results = dlasso.fit(y, d, X)
+model = DoublePostLasso()
+model.fit(X, D, Y)
 
-# Summary output
-print(results.summary())
+# Get selected variables
+print("Selected variables:", model.selected_vars_)
 
-# Confidence intervals
-ci = results.confint()
-print(ci)
+# Make predictions
+y_pred = model.predict(X.values)
+print("First 5 predictions:", y_pred[:5])
 ```
 
 ## Examples
 
 See the `examples/` directory for use cases including:
 
-* Treatment effect estimation with high-dimensional data
-* Comparison with OLS and single-selection Lasso
-* Binary and continuous treatments
-* Bootstrap confidence intervals
-
 ## Background
 
 ### Why Double Lasso?
 
-When estimating a treatment effect, including too many irrelevant controls inflates variance, while omitting important ones introduces bias. In high-dimensional settings, Lasso helps by selecting the most relevant controls. But naive Lasso inference is not valid due to post-selection bias.
+When estimating a treatment effect, including too many irrelevant controls inflates variance, while omitting important confounders introduces bias. In high-dimensional settings, Lasso helps by selecting a sparse set of relevant covariates. However, two problems arise: (1) standard confidence intervals after Lasso are invalid due to model selection, and (2) Lasso estimates are biased toward zero because of regularization.
 
-Double Post-Lasso solves this by running Lasso twice:
-
-1. Regress outcome $Y$ on covariates $X$ to find predictors of $Y$
-2. Regress treatment $D$ on $X$ to find predictors of $D$
-3. Take the union of selected variables, and use them in a final OLS regression of $Y$ on $D$ and selected $X$
-
-This ensures that both confounders of the outcome and predictors of treatment are controlled for, yielding valid inference.
+Double Post-Lasso, proposed by Belloni, Chernozhukov, and Hansen (2014), addresses this by performing variable selection in both the outcome and treatment equations. This approach ensures that the model controls for variables that influence either the treatment or the outcome, yielding valid estimates and confidence intervals for the treatment effect.
 
 ---
 
-### Notation and Key Equations
+### Notation
 
-Let:
+Let's establish the following notation:
 
-* $Y$: outcome
-* $D$: treatment (scalar)
-* $X = (X_1, \dots, X_p)$: high-dimensional controls
+* $Y$: outcome variable
+* $D$: treatment variable
+* $X = (X_1, \dots, X_p)$: high-dimensional controls variables
+
+---
+
+### Estimation
 
 The goal is to estimate the partial effect of $D$ on $Y$, denoted $\alpha$, in the partially linear model:
 
 $$
-Y_i = \alpha D_i + X_i^\top \beta + \varepsilon_i
+Y_i = \alpha D_i + f(X_i) + \varepsilon_i
 $$
 
 The Double Post-Lasso procedure follows:
@@ -101,11 +90,13 @@ $$
 Y_i = \alpha D_i + X_{i,\hat{S}}^\top \beta + \varepsilon_i
 $$
 
-This final regression yields an unbiased estimate of $\alpha$ with valid standard errors.
+Belloni et al. (2014) show this final regression delivers a consistent and asymptotically normal estimator of $\alpha$.
 
 ---
 
 ### Assumptions
+
+The method relies on the following key assumptions:
 
 * Sparsity: The true regression functions depend only on a small subset of covariates
 * Exogeneity: $D$ is exogenous after controlling for $X$
@@ -116,15 +107,7 @@ This final regression yields an unbiased estimate of $\alpha$ with valid standar
 
 ### Confidence Intervals
 
-The final post-Lasso OLS regression produces valid asymptotic standard errors, even though variable selection was performed.
-
-Additionally, the package supports bootstrap confidence intervals:
-
-```python
-results.bootstrap(n_bootstrap=500, ci_level=0.95)
-```
-
-These intervals account for randomness in both the selection and estimation stages.
+The final post-Lasso OLS regression produces valid asymptotic standard errors, even though variable selection was performed. Additionally, the package supports bootstrap confidence intervals which account for randomness in both the selection and estimation stages.
 
 ---
 

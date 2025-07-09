@@ -1,1 +1,1 @@
-from .core import DoublePostLasso 
+from .double_post_lasso import DoublePostLasso 

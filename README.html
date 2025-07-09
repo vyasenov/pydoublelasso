@@ -113,7 +113,7 @@ window.Quarto = {
 
 <section id="pydoublelasso" class="level1">
 <h1>pydoublelasso</h1>
-<p>A Python package for estimating treatment effects using the Double Post-Lasso procedure from Belloni, Chernozhukov, and Hansen (2014): <em>“Inference on Treatment Effects after Selection among High-Dimensional Controls.”</em> This method is designed for valid inference in the presence of many covariates, using Lasso for model selection followed by OLS for estimation.</p>
+<p>A Python package for estimating treatment effects using the Double Post-Lasso procedure from Belloni, Chernozhukov, and Hansen (2014). This method is designed for valid inference in the presence of many covariates, using Lasso for model selection followed by OLS for estimation.</p>
 <section id="installation" class="level2">
 <h2 class="anchored" data-anchor-id="installation">Installation</h2>
 <p>You can install the package using pip:</p>
@@ -162,38 +162,30 @@ window.Quarto = {
 <section id="examples" class="level2">
 <h2 class="anchored" data-anchor-id="examples">Examples</h2>
 <p>See the <code>examples/</code> directory for use cases including:</p>
-<ul>
-<li>Treatment effect estimation with high-dimensional data</li>
-<li>Comparison with OLS and single-selection Lasso</li>
-<li>Binary and continuous treatments</li>
-<li>Bootstrap confidence intervals</li>
-</ul>
 </section>
 <section id="background" class="level2">
 <h2 class="anchored" data-anchor-id="background">Background</h2>
 <section id="why-double-lasso" class="level3">
 <h3 class="anchored" data-anchor-id="why-double-lasso">Why Double Lasso?</h3>
-<p>When estimating a treatment effect, including too many irrelevant controls inflates variance, while omitting important ones introduces bias. In high-dimensional settings, Lasso helps by selecting the most relevant controls. But naive Lasso inference is not valid due to post-selection bias.</p>
-<p>Double Post-Lasso solves this by running Lasso twice:</p>
-<ol type="1">
-<li>Regress outcome <span class="math inline">\(Y\)</span> on covariates <span class="math inline">\(X\)</span> to find predictors of <span class="math inline">\(Y\)</span></li>
-<li>Regress treatment <span class="math inline">\(D\)</span> on <span class="math inline">\(X\)</span> to find predictors of <span class="math inline">\(D\)</span></li>
-<li>Take the union of selected variables, and use them in a final OLS regression of <span class="math inline">\(Y\)</span> on <span class="math inline">\(D\)</span> and selected <span class="math inline">\(X\)</span></li>
-</ol>
-<p>This ensures that both confounders of the outcome and predictors of treatment are controlled for, yielding valid inference.</p>
+<p>When estimating a treatment effect, including too many irrelevant controls increases variance, while omitting important confounders induces bias. In high-dimensional settings, Lasso helps by selecting a sparse set of relevant controls. However, standard inference after Lasso is invalid due to the model selection step.</p>
+<p>Double Post-Lasso, proposed by Belloni, Chernozhukov, and Hansen (2014), addresses this by performing variable selection in both the outcome and treatment equations. This approach ensures that the model controls for variables that influence either the treatment or the outcome, yielding valid estimates and confidence intervals for the treatment effect.</p>
 <hr>
 </section>
-<section id="notation-and-key-equations" class="level3">
-<h3 class="anchored" data-anchor-id="notation-and-key-equations">Notation and Key Equations</h3>
-<p>Let:</p>
+<section id="notation" class="level3">
+<h3 class="anchored" data-anchor-id="notation">Notation</h3>
+<p>Let’s establish the following notation:</p>
 <ul>
-<li><span class="math inline">\(Y\)</span>: outcome</li>
-<li><span class="math inline">\(D\)</span>: treatment (scalar)</li>
-<li><span class="math inline">\(X = (X_1, \dots, X_p)\)</span>: high-dimensional controls</li>
+<li><span class="math inline">\(Y\)</span>: outcome variable</li>
+<li><span class="math inline">\(D\)</span>: treatment variable</li>
+<li><span class="math inline">\(X = (X_1, \dots, X_p)\)</span>: high-dimensional controls variables</li>
 </ul>
+<hr>
+</section>
+<section id="estimation" class="level3">
+<h3 class="anchored" data-anchor-id="estimation">Estimation</h3>
 <p>The goal is to estimate the partial effect of <span class="math inline">\(D\)</span> on <span class="math inline">\(Y\)</span>, denoted <span class="math inline">\(\alpha\)</span>, in the partially linear model:</p>
 <p><span class="math display">\[
-Y_i = \alpha D_i + X_i^\top \beta + \varepsilon_i
+Y_i = \alpha D_i + f(X_i) + \varepsilon_i
 \]</span></p>
 <p>The Double Post-Lasso procedure follows:</p>
 <ol type="1">
@@ -205,7 +197,7 @@ Y_i = \alpha D_i + X_i^\top \beta + \varepsilon_i
 <p><span class="math display">\[
 Y_i = \alpha D_i + X_{i,\hat{S}}^\top \beta + \varepsilon_i
 \]</span></p>
-<p>This final regression yields an unbiased estimate of <span class="math inline">\(\alpha\)</span> with valid standard errors.</p>
+<p>Belloni et al.&nbsp;(2014) show this final regression delivers a consistent and asymptotically normal estimator of <span class="math inline">\(\alpha\)</span>.</p>
 <hr>
 </section>
 <section id="assumptions" class="level3">
@@ -220,10 +212,7 @@ Y_i = \alpha D_i + X_{i,\hat{S}}^\top \beta + \varepsilon_i
 </section>
 <section id="confidence-intervals" class="level3">
 <h3 class="anchored" data-anchor-id="confidence-intervals">Confidence Intervals</h3>
-<p>The final post-Lasso OLS regression produces valid asymptotic standard errors, even though variable selection was performed.</p>
-<p>Additionally, the package supports bootstrap confidence intervals:</p>
-<div class="sourceCode" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a>results.bootstrap(n_bootstrap<span class="op">=</span><span class="dv">500</span>, ci_level<span class="op">=</span><span class="fl">0.95</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
-<p>These intervals account for randomness in both the selection and estimation stages.</p>
+<p>The final post-Lasso OLS regression produces valid asymptotic standard errors, even though variable selection was performed. Additionally, the package supports bootstrap confidence intervals which account for randomness in both the selection and estimation stages.</p>
 <hr>
 </section>
 </section>
@@ -241,13 +230,13 @@ Y_i = \alpha D_i + X_{i,\hat{S}}^\top \beta + \varepsilon_i
 <section id="citation" class="level2">
 <h2 class="anchored" data-anchor-id="citation">Citation</h2>
 <p>To cite this package in publications, use the following BibTeX entry:</p>
-<div class="sourceCode" id="cb4"><pre class="sourceCode bibtex code-with-copy"><code class="sourceCode bibtex"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="va">@misc</span>{<span class="ot">yasenov2025pydoublelasso</span>,</span>
-<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a>  <span class="dt">author</span>       = {Vasco Yasenov},</span>
-<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a>  <span class="dt">title</span>        = {pydoublelasso: Python Implementation of the Double Post-Lasso Estimator},</span>
-<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a>  <span class="dt">year</span>         = {2025},</span>
-<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a>  <span class="dt">howpublished</span> = {<span class="ch">\url</span>{https://github.com/vyasenov/pydoublelasso}},</span>
-<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a>  <span class="dt">note</span>         = {Version 0.1.0}</span>
-<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a>}</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode" id="cb3"><pre class="sourceCode bibtex code-with-copy"><code class="sourceCode bibtex"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="va">@misc</span>{<span class="ot">yasenov2025pydoublelasso</span>,</span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>  <span class="dt">author</span>       = {Vasco Yasenov},</span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>  <span class="dt">title</span>        = {pydoublelasso: Python Implementation of the Double Post-Lasso Estimator},</span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a>  <span class="dt">year</span>         = {2025},</span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a>  <span class="dt">howpublished</span> = {<span class="ch">\url</span>{https://github.com/vyasenov/pydoublelasso}},</span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a>  <span class="dt">note</span>         = {Version 0.1.0}</span>
+<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a>}</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </section>
 </section>
 
