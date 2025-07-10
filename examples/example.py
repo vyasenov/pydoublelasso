@@ -34,26 +34,26 @@ df = pd.DataFrame({
 })
 df = pd.concat([df, X_df], axis=1)
 
+#########################
+# Summary Statistics #
+#########################
+
 print("Data shape:", df.shape)
 print("First few rows:")
 print(df.head())
-
-#########################
-# Fit Double Post-Lasso #
-#########################
-
-print("\n" + "=" * 60)
-print("DOUBLE POST-LASSO WITH DIFFERENT TUNING METHODS")
-print("=" * 60)
-
-# Example with no bootstrap (faster)
-print(f"\n{'='*20} CV TUNING (NO BOOTSTRAP) {'='*20}")
+print(df.describe())
 
 # Extract features and target variables
 X_features = df.drop(columns=['outcome', 'treatment'])
 y_target = df['outcome']
 d_treatment = df['treatment']
 
+#########################
+# Fit Double Post-Lasso #
+#########################
+
+# Example with no bootstrap (faster)
+print(f"\n{'='*20} CV TUNING (NO BOOTSTRAP) {'='*20}")
 model = DoublePostLasso(tuning_method='cv', bootstrap=False)
 model.fit(X_features, d_treatment, y_target)
 model.print_ols_results() 
@@ -71,3 +71,19 @@ model_plugin.print_ols_results()
 ################
 # Bootstrap CI #
 ################
+
+print(f"\n{'='*20} BOOTSTRAP CONFIDENCE INTERVALS {'='*20}")
+
+# Test with bootstrap enabled (smaller sample for speed)
+print("\n--- Bootstrap with CV tuning ---")
+model_bootstrap = DoublePostLasso(tuning_method='cv', bootstrap=True, n_bootstrap=500, bootstrap_seed=1988)
+model_bootstrap.fit(X_features, d_treatment, y_target)
+model_bootstrap.print_ols_results()
+
+# Get detailed bootstrap results
+bootstrap_ci = model_bootstrap.get_bootstrap_ci(confidence_level=0.95)
+print(f"\nBootstrap Treatment Effect Results (95% CI):")
+print(f"  Mean: {bootstrap_ci['treatment_effect']['mean']:.6f}")
+print(f"  Std: {bootstrap_ci['treatment_effect']['std']:.6f}")
+print(f"  Lower bound: {bootstrap_ci['treatment_effect']['lower']:.6f}")
+print(f"  Upper bound: {bootstrap_ci['treatment_effect']['upper']:.6f}")

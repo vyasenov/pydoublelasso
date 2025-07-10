@@ -8,16 +8,16 @@ class DoublePostLasso:
     Implementation of the Double Post-Lasso procedure (Belloni, Chernozhukov, et al.)
     with multiple lambda tuning options and bootstrap variance estimation.
     """
-    def __init__(self, tuning_method='cv', alpha=None, random_state=None, 
+    def __init__(self, tuning_method='plugin', alpha=None, random_state=None, 
                  bootstrap=False, n_bootstrap=1000, bootstrap_seed=None):
         """
         Initialize Double Post-Lasso.
         
         Parameters:
             tuning_method: str, one of ['cv', 'adaptive', 'plugin']
-                - 'cv': Cross-validation (default)
+                - 'cv': Cross-validation
                 - 'adaptive': Adaptive Lasso
-                - 'plugin': Optimal plugin formula
+                - 'plugin': Optimal plugin formula (default)
             alpha: float, optional. If provided, overrides tuning_method
             random_state: int, random state for reproducibility
             bootstrap: bool, whether to use bootstrap for variance estimation
@@ -48,58 +48,43 @@ class DoublePostLasso:
         self.X_columns_ = None
         self.X_is_dataframe_ = False
 
-    def _convert_to_numpy(self, data, name="data"):
-        """
-        Convert pandas DataFrame/Series to numpy array if needed.
+    def _get_lambda(self, X, y, method):
+        """Get lambda using specified tuning method."""
+        if method == 'cv':
+            # Cross-validation
+            lasso_cv = LassoCV(cv=5, random_state=self.random_state)
+            lasso_cv.fit(X, y.ravel())
+            return lasso_cv.alpha_
         
-        Parameters:
-            data: pandas DataFrame/Series or numpy array
-            name: str, name for error messages
+        elif method == 'adaptive':
+            # Adaptive Lasso approach
+            # First stage: OLS to get initial weights
+            ols = LinearRegression()
+            ols.fit(X, y.ravel())
+            initial_coefs = ols.coef_
             
-        Returns:
-            numpy array
-        """
-        if isinstance(data, pd.DataFrame):
-            return data.values
-        elif isinstance(data, pd.Series):
-            return data.values
-        elif isinstance(data, np.ndarray):
-            return data
+            # Avoid division by zero
+            weights = 1.0 / (np.abs(initial_coefs) + 1e-8)
+            
+            # Second stage: weighted Lasso
+            # Use cross-validation to find optimal lambda for weighted problem
+            lasso_cv = LassoCV(cv=5, random_state=self.random_state)
+            lasso_cv.fit(X * weights, y.ravel())
+            return lasso_cv.alpha_
+        
+        elif method == 'plugin':
+            # Optimal plugin formula
+            n, p = X.shape
+            
+            # Belloni et al. (2014) plugin formula
+            # λ = 2c * sqrt(log(p)/n) where c is typically 1.1
+            c = 1.1
+            lambda_plugin = 2 * c * np.sqrt(np.log(p) / n)
+            
+            return lambda_plugin
+        
         else:
-            raise TypeError(f"{name} must be a pandas DataFrame/Series or numpy array")
-
-    def _get_lambda_cv(self, X, y):
-        """Get lambda using cross-validation."""
-        lasso_cv = LassoCV(cv=5, random_state=self.random_state)
-        lasso_cv.fit(X, y.ravel())
-        return lasso_cv.alpha_
-
-    def _get_lambda_adaptive(self, X, y):
-        """Get lambda using adaptive Lasso approach."""
-        # First stage: OLS to get initial weights
-        ols = LinearRegression()
-        ols.fit(X, y.ravel())
-        initial_coefs = ols.coef_
-        
-        # Avoid division by zero
-        weights = 1.0 / (np.abs(initial_coefs) + 1e-8)
-        
-        # Second stage: weighted Lasso
-        # Use cross-validation to find optimal lambda for weighted problem
-        lasso_cv = LassoCV(cv=5, random_state=self.random_state)
-        lasso_cv.fit(X * weights, y.ravel())
-        return lasso_cv.alpha_
-
-    def _get_lambda_plugin(self, X, y):
-        """Get lambda using optimal plugin formula."""
-        n, p = X.shape
-        
-        # Belloni et al. (2014) plugin formula
-        # λ = 2c * sqrt(log(p)/n) where c is typically 1.1
-        c = 1.1
-        lambda_plugin = 2 * c * np.sqrt(np.log(p) / n)
-        
-        return lambda_plugin
+            raise ValueError(f"Unknown tuning method: {method}")
 
     def _fit_lasso_with_tuning(self, X, y, step_name):
         """Fit Lasso with specified tuning method."""
@@ -108,14 +93,7 @@ class DoublePostLasso:
             lambda_val = self.alpha
         else:
             # Use specified tuning method
-            if self.tuning_method == 'cv':
-                lambda_val = self._get_lambda_cv(X, y)
-            elif self.tuning_method == 'adaptive':
-                lambda_val = self._get_lambda_adaptive(X, y)
-            elif self.tuning_method == 'plugin':
-                lambda_val = self._get_lambda_plugin(X, y)
-            else:
-                raise ValueError(f"Unknown tuning_method: {self.tuning_method}")
+            lambda_val = self._get_lambda(X, y, self.tuning_method)
         
         # Store lambda value
         if step_name == 'D':
@@ -199,9 +177,9 @@ class DoublePostLasso:
         """
         # Convert to numpy arrays and store metadata
         X_original = X
-        X = self._convert_to_numpy(X, "X")
-        D = self._convert_to_numpy(D, "D")
-        Y = self._convert_to_numpy(Y, "Y")
+        X = np.asarray(X)
+        D = np.asarray(D)
+        Y = np.asarray(Y)
         
         # Store column names if X was a DataFrame
         if isinstance(X_original, pd.DataFrame):
@@ -235,7 +213,7 @@ class DoublePostLasso:
         X_with_constant = sm.add_constant(X_with_D)
         
         # Create variable names for better output
-        var_names = ['const', 'treatment_D']
+        var_names = ['const', 'D']
         if self.X_columns_ is not None:
             # Use actual column names
             selected_names = [self.X_columns_[i] for i in active_union]
@@ -244,13 +222,15 @@ class DoublePostLasso:
             # Use generic names
             var_names.extend([f'X{i}' for i in active_union])
         
-        ols_model = sm.OLS(Y.ravel(), X_with_constant)
+        # Create DataFrame with proper column names to preserve variable names
+        df_for_ols = pd.DataFrame(X_with_constant, columns=var_names)
+        ols_model = sm.OLS(Y.ravel(), df_for_ols)
         self.ols_results_ = ols_model.fit(cov_type='HC1')
         
         # Store coefficients for prediction
-        self.intercept_ = self.ols_results_.params[0]  # constant
-        self.treatment_coef_ = self.ols_results_.params[1]  # treatment effect
-        self.control_coefs_ = self.ols_results_.params[2:]  # control variables
+        self.intercept_ = self.ols_results_.params.iloc[0]  # constant
+        self.treatment_coef_ = self.ols_results_.params.iloc[1]  # treatment effect
+        self.control_coefs_ = self.ols_results_.params.iloc[2:].values  # control variables
         
         # Run bootstrap if requested
         if self.bootstrap:
@@ -272,9 +252,9 @@ class DoublePostLasso:
             raise RuntimeError("Model not fitted yet.")
         
         # Convert to numpy arrays
-        X = self._convert_to_numpy(X, "X")
+        X = np.asarray(X)
         if D is not None:
-            D = self._convert_to_numpy(D, "D")
+            D = np.asarray(D)
         
         X_selected = X[:, self.selected_vars_]
         
@@ -322,28 +302,12 @@ class DoublePostLasso:
         treatment_ci = np.percentile(self.bootstrap_treatment_coefs_, 
                                    [lower_percentile, upper_percentile])
         
-        # Control coefficients confidence intervals
-        control_cis = []
-        if len(self.bootstrap_control_coefs_) > 0 and len(self.bootstrap_control_coefs_[0]) > 0:
-            # Stack all bootstrap control coefficients
-            all_control_coefs = np.vstack([coefs for coefs in self.bootstrap_control_coefs_ 
-                                         if len(coefs) > 0])
-            if all_control_coefs.shape[0] > 0:
-                control_cis = np.percentile(all_control_coefs, 
-                                         [lower_percentile, upper_percentile], axis=0)
-        
         return {
             'treatment_effect': {
                 'lower': treatment_ci[0],
                 'upper': treatment_ci[1],
                 'mean': np.mean(self.bootstrap_treatment_coefs_),
                 'std': np.std(self.bootstrap_treatment_coefs_)
-            },
-            'control_coefficients': {
-                'lower': control_cis[0] if len(control_cis) > 0 else [],
-                'upper': control_cis[1] if len(control_cis) > 0 else [],
-                'mean': np.mean(all_control_coefs, axis=0) if len(control_cis) > 0 else [],
-                'std': np.std(all_control_coefs, axis=0) if len(control_cis) > 0 else []
             }
         }
     
@@ -383,9 +347,9 @@ class DoublePostLasso:
         
         # Show treatment effect prominently
         print(f"TREATMENT EFFECT (α): {self.treatment_coef_:.6f}")
-        treatment_se = self.ols_results_.bse[1]  # Standard error of treatment effect
-        treatment_t = self.ols_results_.tvalues[1]  # t-statistic
-        treatment_p = self.ols_results_.pvalues[1]  # p-value
+        treatment_se = self.ols_results_.bse.iloc[1]  # Standard error of treatment effect
+        treatment_t = self.ols_results_.tvalues.iloc[1]  # t-statistic
+        treatment_p = self.ols_results_.pvalues.iloc[1]  # p-value
         print(f"Treatment effect std error: {treatment_se:.6f}")
         print(f"Treatment effect t-statistic: {treatment_t:.6f}")
         print(f"Treatment effect p-value: {treatment_p:.6f}")
