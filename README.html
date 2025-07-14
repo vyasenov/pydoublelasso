@@ -113,6 +113,7 @@ window.Quarto = {
 
 <section id="pydoublelasso" class="level1">
 <h1>pydoublelasso</h1>
+<p><img src="https://img.shields.io/badge/license-MIT-green.png" class="img-fluid"></p>
 <p>A Python package for estimating treatment effects using the Double Post-Lasso procedure from Belloni, Chernozhukov, and Hansen (2014). This method is designed for valid inference in the presence of many covariates, using Lasso for model selection followed by OLS for estimation.</p>
 <section id="installation" class="level2">
 <h2 class="anchored" data-anchor-id="installation">Installation</h2>
@@ -133,31 +134,28 @@ window.Quarto = {
 <section id="quick-start" class="level2">
 <h2 class="anchored" data-anchor-id="quick-start">Quick Start</h2>
 <div class="sourceCode" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> pandas <span class="im">as</span> pd</span>
-<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> pydoublelasso <span class="im">import</span> DoubleLasso</span>
-<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a><span class="co"># Simulated data</span></span>
-<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>df <span class="op">=</span> pd.read_csv(<span class="st">"your_data.csv"</span>)</span>
-<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a><span class="co"># Columns:</span></span>
-<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a><span class="co"># 'Y' = outcome</span></span>
-<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a><span class="co"># 'D' = treatment (binary or continuous)</span></span>
-<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a><span class="co"># other columns = potential controls</span></span>
-<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a><span class="co"># Set up model</span></span>
-<span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a>X <span class="op">=</span> df.drop(columns<span class="op">=</span>[<span class="st">'Y'</span>, <span class="st">'D'</span>])</span>
-<span id="cb2-14"><a href="#cb2-14" aria-hidden="true" tabindex="-1"></a>y <span class="op">=</span> df[<span class="st">'Y'</span>]</span>
-<span id="cb2-15"><a href="#cb2-15" aria-hidden="true" tabindex="-1"></a>d <span class="op">=</span> df[<span class="st">'D'</span>]</span>
-<span id="cb2-16"><a href="#cb2-16" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb2-17"><a href="#cb2-17" aria-hidden="true" tabindex="-1"></a><span class="co"># Run Double Post-Lasso</span></span>
-<span id="cb2-18"><a href="#cb2-18" aria-hidden="true" tabindex="-1"></a>dlasso <span class="op">=</span> DoubleLasso()</span>
-<span id="cb2-19"><a href="#cb2-19" aria-hidden="true" tabindex="-1"></a>results <span class="op">=</span> dlasso.fit(y, d, X)</span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> numpy <span class="im">as</span> np</span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> pydoublelasso <span class="im">import</span> DoublePostLasso</span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a><span class="co"># Generate synthetic data</span></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a>np.random.seed(<span class="dv">1988</span>)</span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a>n_obs, n_features <span class="op">=</span> <span class="dv">1000</span>, <span class="dv">50</span></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a><span class="co"># Generate covariates</span></span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a>X <span class="op">=</span> np.random.randn(n, p)</span>
+<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a>D <span class="op">=</span> X[:, <span class="dv">0</span>] <span class="op">+</span> <span class="fl">0.5</span> <span class="op">*</span> X[:, <span class="dv">1</span>] <span class="op">+</span> np.random.randn(n) <span class="op">*</span> <span class="fl">0.5</span>  <span class="co"># Treatment depends on X0, X1</span></span>
+<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a>Y <span class="op">=</span> <span class="dv">2</span> <span class="op">*</span> D <span class="op">+</span> X[:, <span class="dv">2</span>] <span class="op">+</span> np.random.randn(n) <span class="op">*</span> <span class="fl">0.5</span>  <span class="co"># Outcome depends on D and X2</span></span>
+<span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-14"><a href="#cb2-14" aria-hidden="true" tabindex="-1"></a><span class="co"># Run Double Post-Lasso</span></span>
+<span id="cb2-15"><a href="#cb2-15" aria-hidden="true" tabindex="-1"></a>model <span class="op">=</span> DoublePostLasso()</span>
+<span id="cb2-16"><a href="#cb2-16" aria-hidden="true" tabindex="-1"></a>model.fit(X, D, Y)</span>
+<span id="cb2-17"><a href="#cb2-17" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-18"><a href="#cb2-18" aria-hidden="true" tabindex="-1"></a><span class="co"># Get selected variables</span></span>
+<span id="cb2-19"><a href="#cb2-19" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"Selected variables:"</span>, model.selected_vars_)</span>
 <span id="cb2-20"><a href="#cb2-20" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb2-21"><a href="#cb2-21" aria-hidden="true" tabindex="-1"></a><span class="co"># Summary output</span></span>
-<span id="cb2-22"><a href="#cb2-22" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(results.summary())</span>
-<span id="cb2-23"><a href="#cb2-23" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb2-24"><a href="#cb2-24" aria-hidden="true" tabindex="-1"></a><span class="co"># Confidence intervals</span></span>
-<span id="cb2-25"><a href="#cb2-25" aria-hidden="true" tabindex="-1"></a>ci <span class="op">=</span> results.confint()</span>
-<span id="cb2-26"><a href="#cb2-26" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(ci)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb2-21"><a href="#cb2-21" aria-hidden="true" tabindex="-1"></a><span class="co"># Make predictions</span></span>
+<span id="cb2-22"><a href="#cb2-22" aria-hidden="true" tabindex="-1"></a>y_pred <span class="op">=</span> model.predict(X.values)</span>
+<span id="cb2-23"><a href="#cb2-23" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"First 5 predictions:"</span>, y_pred[:<span class="dv">5</span>])</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </section>
 <section id="examples" class="level2">
 <h2 class="anchored" data-anchor-id="examples">Examples</h2>
@@ -167,7 +165,7 @@ window.Quarto = {
 <h2 class="anchored" data-anchor-id="background">Background</h2>
 <section id="why-double-lasso" class="level3">
 <h3 class="anchored" data-anchor-id="why-double-lasso">Why Double Lasso?</h3>
-<p>When estimating a treatment effect, including too many irrelevant controls increases variance, while omitting important confounders induces bias. In high-dimensional settings, Lasso helps by selecting a sparse set of relevant controls. However, standard inference after Lasso is invalid due to the model selection step.</p>
+<p>When estimating a treatment effect, including too many irrelevant controls inflates variance, while omitting important confounders introduces bias. In high-dimensional settings, Lasso helps by selecting a sparse set of relevant covariates. However, two problems arise: (1) standard confidence intervals after Lasso are invalid due to model selection, and (2) Lasso estimates are biased toward zero because of regularization.</p>
 <p>Double Post-Lasso, proposed by Belloni, Chernozhukov, and Hansen (2014), addresses this by performing variable selection in both the outcome and treatment equations. This approach ensures that the model controls for variables that influence either the treatment or the outcome, yielding valid estimates and confidence intervals for the treatment effect.</p>
 <hr>
 </section>
@@ -202,6 +200,7 @@ Y_i = \alpha D_i + X_{i,\hat{S}}^\top \beta + \varepsilon_i
 </section>
 <section id="assumptions" class="level3">
 <h3 class="anchored" data-anchor-id="assumptions">Assumptions</h3>
+<p>The method relies on the following key assumptions:</p>
 <ul>
 <li>Sparsity: The true regression functions depend only on a small subset of covariates</li>
 <li>Exogeneity: <span class="math inline">\(D\)</span> is exogenous after controlling for <span class="math inline">\(X\)</span></li>

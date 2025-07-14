@@ -1,5 +1,7 @@
 # pydoublelasso
 
+![](https://img.shields.io/badge/license-MIT-green)
+
 A Python package for estimating treatment effects using the Double Post-Lasso procedure from Belloni, Chernozhukov, and Hansen (2014). This method is designed for valid inference in the presence of many covariates, using Lasso for model selection followed by OLS for estimation.
 
 ## Installation
