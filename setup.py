@@ -25,7 +25,7 @@ def read_requirements():
 
 setup(
     name="pydoublelasso",
-    version="0.1.0",
+    version="0.2.0",
     author="Vasco Yasenov",
     author_email="",  # Add your email if desired
     description="Python implementation of the Double Post-Lasso estimator for treatment effect estimation",
