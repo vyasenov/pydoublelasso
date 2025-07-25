@@ -27,7 +27,7 @@ setup(
     name="pydoublelasso",
     version="0.2.0",
     author="Vasco Yasenov",
-    author_email="",  # Add your email if desired
+    author_email="yasenov@gmail.com",  
     description="Python implementation of the Double Post-Lasso estimator for treatment effect estimation",
     long_description=read_readme(),
     long_description_content_type="text/markdown",

@@ -334,7 +334,7 @@ class DoublePostLasso:
 
     def predict(self, X, D=None):
         """
-        Predict using the fitted model.
+        Predict outcomes using the fitted model.
         Parameters:
             X: np.ndarray or pd.DataFrame, shape (n_samples, n_features) - control variables
             D: np.ndarray or pd.Series, shape (n_samples,) - treatment variable (optional)
@@ -348,12 +348,20 @@ class DoublePostLasso:
         # Store original input for pandas handling
         X_original = X
         
-        # Use _validate_data for X (pass dummy D and Y for validation)
-        X_arr, _, _ = self._validate_data(X, np.zeros(X.shape[0]), np.zeros(X.shape[0]))
+        # Simple validation for X
+        X_arr = np.asarray(X)
+        if X_arr.ndim == 1:
+            X_arr = X_arr.reshape(-1, 1)
+        
+        # Check for missing/infinite values in X
+        if np.any(np.isnan(X_arr)) or np.any(np.isinf(X_arr)):
+            raise ValueError("Control variables (X) contain missing or infinite values")
         
         # Validate D if provided
         if D is not None:
-            _, D_arr, _ = self._validate_data(np.zeros(D.shape[0]), D, np.zeros(D.shape[0]))
+            D_arr = np.asarray(D)
+            if np.any(np.isnan(D_arr)) or np.any(np.isinf(D_arr)):
+                raise ValueError("Treatment variable (D) contains missing or infinite values")
         else:
             D_arr = None
         

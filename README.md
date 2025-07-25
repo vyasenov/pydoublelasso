@@ -30,7 +30,7 @@ from pydoublelasso import DoublePostLasso
 
 # Generate synthetic data
 np.random.seed(1988)
-n_obs, n_features = 1000, 50
+n, p = 1000, 50
 
 # Generate covariates
 X = np.random.randn(n, p)
@@ -41,12 +41,17 @@ Y = 2 * D + X[:, 2] + np.random.randn(n) * 0.5  # Outcome depends on D and X2
 model = DoublePostLasso()
 model.fit(X, D, Y)
 
-# Get selected variables
-print("Selected variables:", model.selected_vars_)
+# Display comprehensive results
+model.summary()
 
 # Make predictions
-y_pred = model.predict(X.values)
+y_pred = model.predict(X)
 print("First 5 predictions:", y_pred[:5])
+
+# With bootstrap confidence intervals
+model_boot = DoublePostLasso(bootstrap=True, n_bootstrap=500)
+model_boot.fit(X, D, Y)
+model_boot.summary()  # Includes bootstrap CI automatically
 ```
 
 ## Examples
