@@ -19,7 +19,7 @@ pip install pydoublelasso
 * Post-selection inference with valid confidence intervals
 * Supports binary or continuous treatment variables
 * Bootstrap and asymptotic confidence intervals
-* Easy integration with pandas and scikit-learn pipelines
+* Easy integration with `pandas` and `scikit-learn` pipelines
 
 ## Quick Start
 

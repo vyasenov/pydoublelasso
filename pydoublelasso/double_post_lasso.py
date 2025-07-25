@@ -5,11 +5,11 @@ import pandas as pd
 
 class DoublePostLasso:
     """
-    Implementation of the Double Post-Lasso procedure (Belloni, Chernozhukov, et al.)
+    Implementation of the Double Post-Lasso procedure (Belloni, Chernozhukov, et al. 2014)
     with multiple lambda tuning options and bootstrap variance estimation.
     """
-    def __init__(self, tuning_method='plugin', alpha=None, random_state=None, 
-                 bootstrap=False, n_bootstrap=1000, bootstrap_seed=None):
+    def __init__(self, tuning_method='plugin', lambda_val=None, random_state=None, 
+                 bootstrap=False, n_bootstrap=1000):
         """
         Initialize Double Post-Lasso.
         
@@ -18,18 +18,16 @@ class DoublePostLasso:
                 - 'cv': Cross-validation
                 - 'adaptive': Adaptive Lasso
                 - 'plugin': Optimal plugin formula (default)
-            alpha: float, optional. If provided, overrides tuning_method
+            lambda_val: float, optional. If provided, overrides tuning_method
             random_state: int, random state for reproducibility
             bootstrap: bool, whether to use bootstrap for variance estimation
             n_bootstrap: int, number of bootstrap samples (default: 1000)
-            bootstrap_seed: int, random seed for bootstrap (default: random_state)
         """
         self.tuning_method = tuning_method
-        self.alpha = alpha
+        self.lambda_val = lambda_val
         self.random_state = random_state
         self.bootstrap = bootstrap
         self.n_bootstrap = n_bootstrap
-        self.bootstrap_seed = bootstrap_seed if bootstrap_seed is not None else random_state
         
         self.selected_vars_ = None
         self.ols_results_ = None
@@ -47,6 +45,74 @@ class DoublePostLasso:
         # Store original data types and column names
         self.X_columns_ = None
         self.X_is_dataframe_ = False
+
+    def _validate_data(self, X, D, Y):
+        """
+        Validate input data for quality and consistency.
+        
+        Parameters:
+            X: np.ndarray or pd.DataFrame, control variables
+            D: np.ndarray or pd.Series, treatment variable  
+            Y: np.ndarray or pd.Series, outcome variable
+            
+        Raises:
+            ValueError: If data validation fails
+        """
+        # Convert to numpy arrays for validation
+        X_arr = np.asarray(X)
+        D_arr = np.asarray(D)
+        Y_arr = np.asarray(Y)
+        
+        # Check for missing values
+        if np.any(np.isnan(X_arr)):
+            raise ValueError("Control variables (X) contain missing values")
+        if np.any(np.isnan(D_arr)):
+            raise ValueError("Treatment variable (D) contains missing values")
+        if np.any(np.isnan(Y_arr)):
+            raise ValueError("Outcome variable (Y) contains missing values")
+
+        # Check data types (should be numeric)
+        if not np.issubdtype(X_arr.dtype, np.number):
+            raise ValueError("Control variables (X) must be numeric")
+        if not np.issubdtype(D_arr.dtype, np.number):
+            raise ValueError("Treatment variable (D) must be numeric")
+        if not np.issubdtype(Y_arr.dtype, np.number):
+            raise ValueError("Outcome variable (Y) must be numeric")
+        
+        # Check dimensions
+        n_samples_X = X_arr.shape[0]
+        n_samples_D = D_arr.shape[0]
+        n_samples_Y = Y_arr.shape[0]
+        
+        if not (n_samples_X == n_samples_D == n_samples_Y):
+            raise ValueError(f"All variables must have the same number of samples. "
+                           f"X: {n_samples_X}, D: {n_samples_D}, Y: {n_samples_Y}")
+        
+        # Check for sufficient sample size
+        if n_samples_X < 10:
+            raise ValueError(f"Sample size too small: {n_samples_X}. Need at least 10 observations.")
+        
+        # Check for sufficient features
+        if X_arr.ndim == 1:
+            n_features = 1
+        else:
+            n_features = X_arr.shape[1]
+        
+        if n_features == 0:
+            raise ValueError("Control variables (X) must have at least one feature")
+        
+        # Check for constant variables (which can cause issues)
+        for i in range(n_features):
+            if np.std(X_arr[:, i]) == 0:
+                raise ValueError(f"Control variable X[:, {i}] is constant")
+        
+        if np.std(D_arr) == 0:
+            raise ValueError("Treatment variable (D) is constant")
+        
+        if np.std(Y_arr) == 0:
+            raise ValueError("Outcome variable (Y) is constant")
+        
+        return X_arr, D_arr, Y_arr
 
     def _get_lambda(self, X, y, method):
         """Get lambda using specified tuning method."""
@@ -86,11 +152,11 @@ class DoublePostLasso:
         else:
             raise ValueError(f"Unknown tuning method: {method}")
 
-    def _fit_lasso_with_tuning(self, X, y, step_name):
+    def _fit_lasso(self, X, y, step_name):
         """Fit Lasso with specified tuning method."""
-        if self.alpha is not None:
-            # Use provided alpha
-            lambda_val = self.alpha
+        if self.lambda_val is not None:
+            # Use provided lambda
+            lambda_val = self.lambda_val
         else:
             # Use specified tuning method
             lambda_val = self._get_lambda(X, y, self.tuning_method)
@@ -110,7 +176,7 @@ class DoublePostLasso:
     def _bootstrap_sample(self, X, D, Y):
         """Generate bootstrap samples."""
         n = X.shape[0]
-        np.random.seed(self.bootstrap_seed)
+        np.random.seed(self.random_state)
         
         bootstrap_treatment_coefs = []
         bootstrap_control_coefs = []
@@ -128,11 +194,11 @@ class DoublePostLasso:
             try:
                 # Fit Double Post-Lasso on bootstrap sample
                 # Step 1: Lasso of D on X
-                lasso_D = self._fit_lasso_with_tuning(X_boot, D_boot, 'D')
+                lasso_D = self._fit_lasso(X_boot, D_boot, 'D')
                 active_D = np.where(lasso_D.coef_ != 0)[0]
 
                 # Step 2: Lasso of Y on X
-                lasso_Y = self._fit_lasso_with_tuning(X_boot, Y_boot, 'Y')
+                lasso_Y = self._fit_lasso(X_boot, Y_boot, 'Y')
                 active_Y = np.where(lasso_Y.coef_ != 0)[0]
 
                 # Step 3: Union of selected variables
@@ -167,6 +233,33 @@ class DoublePostLasso:
                 np.array(bootstrap_treatment_coefs), 
                 bootstrap_control_coefs)
 
+    def _get_bootstrap_ci(self):
+        """
+        Get bootstrap confidence intervals.
+        
+        Returns:
+            dict: Confidence intervals for treatment effect and control coefficients
+        """
+        if not self.bootstrap or self.bootstrap_treatment_coefs_ is None:
+            raise RuntimeError("Bootstrap not run. Set bootstrap=True in __init__.")
+        
+        alpha = 1 - 0.95 # Confidence level is 95%
+        lower_percentile = (alpha / 2) * 100
+        upper_percentile = (1 - alpha / 2) * 100
+        
+        # Treatment effect confidence interval
+        treatment_ci = np.percentile(self.bootstrap_treatment_coefs_, 
+                                   [lower_percentile, upper_percentile])
+        
+        return {
+            'treatment_effect': {
+                'lower': treatment_ci[0],
+                'upper': treatment_ci[1],
+                'mean': np.mean(self.bootstrap_treatment_coefs_),
+                'std': np.std(self.bootstrap_treatment_coefs_)
+            }
+        } 
+        
     def fit(self, X, D, Y):
         """
         Run the double post-lasso procedure.
@@ -175,11 +268,9 @@ class DoublePostLasso:
             D: np.ndarray or pd.Series, shape (n_samples,) - treatment variable
             Y: np.ndarray or pd.Series, shape (n_samples,) - outcome variable
         """
-        # Convert to numpy arrays and store metadata
+        # Validate and convert data
         X_original = X
-        X = np.asarray(X)
-        D = np.asarray(D)
-        Y = np.asarray(Y)
+        X, D, Y = self._validate_data(X, D, Y)
         
         # Store column names if X was a DataFrame
         if isinstance(X_original, pd.DataFrame):
@@ -190,11 +281,11 @@ class DoublePostLasso:
             self.X_is_dataframe_ = False
         
         # Step 1: Lasso of D on X
-        lasso_D = self._fit_lasso_with_tuning(X, D, 'D')
+        lasso_D = self._fit_lasso(X, D, 'D')
         active_D = np.where(lasso_D.coef_ != 0)[0]
 
         # Step 2: Lasso of Y on X
-        lasso_Y = self._fit_lasso_with_tuning(X, Y, 'Y')
+        lasso_Y = self._fit_lasso(X, Y, 'Y')
         active_Y = np.where(lasso_Y.coef_ != 0)[0]
 
         # Step 3: Union of selected variables
@@ -247,77 +338,58 @@ class DoublePostLasso:
         Parameters:
             X: np.ndarray or pd.DataFrame, shape (n_samples, n_features) - control variables
             D: np.ndarray or pd.Series, shape (n_samples,) - treatment variable (optional)
+            
+        Returns:
+            np.ndarray: Predictions
         """
         if self.selected_vars_ is None or self.ols_results_ is None:
             raise RuntimeError("Model not fitted yet.")
         
-        # Convert to numpy arrays
-        X = np.asarray(X)
-        if D is not None:
-            D = np.asarray(D)
+        # Store original input for pandas handling
+        X_original = X
         
-        X_selected = X[:, self.selected_vars_]
+        # Use _validate_data for X (pass dummy D and Y for validation)
+        X_arr, _, _ = self._validate_data(X, np.zeros(X.shape[0]), np.zeros(X.shape[0]))
+        
+        # Validate D if provided
+        if D is not None:
+            _, D_arr, _ = self._validate_data(np.zeros(D.shape[0]), D, np.zeros(D.shape[0]))
+        else:
+            D_arr = None
+        
+        X_selected = X_arr[:, self.selected_vars_]
         
         # If D is provided, use the full model: Y = intercept + α*D + X_selected*β
-        if D is not None:
+        if D_arr is not None:
             predictions = (self.intercept_ + 
-                         self.treatment_coef_ * D.ravel() + 
+                         self.treatment_coef_ * D_arr.ravel() + 
                          np.dot(X_selected, self.control_coefs_))
         else:
             # If D is not provided, assume D=0 (control group prediction)
             predictions = (self.intercept_ + 
                          np.dot(X_selected, self.control_coefs_))
         
+        # Return as pandas Series if input was a DataFrame and we have an index
+        if isinstance(X_original, pd.DataFrame) and hasattr(X_original, 'index'):
+            return pd.Series(predictions, index=X_original.index, name='predictions')
+        
         return predictions
     
-    def get_selected_variable_names(self):
+    def summary(self):
         """
-        Get names of selected variables if X was a pandas DataFrame.
+        Display comprehensive results of the Double Post-Lasso procedure.
+        
+        Shows tuning parameters, selected variables, treatment effect with statistics,
+        and bootstrap confidence intervals (if bootstrap=True was used).
         
         Returns:
-            list: Names of selected variables, or None if X was not a DataFrame
+            statsmodels.regression.linear_model.RegressionResultsWrapper: 
+            The underlying OLS results object
         """
-        if self.X_columns_ is not None and self.selected_vars_ is not None:
-            return [self.X_columns_[i] for i in self.selected_vars_]
-        return None
-    
-    def get_bootstrap_ci(self, confidence_level=0.95):
-        """
-        Get bootstrap confidence intervals.
-        
-        Parameters:
-            confidence_level: float, confidence level (default: 0.95)
-            
-        Returns:
-            dict: Confidence intervals for treatment effect and control coefficients
-        """
-        if not self.bootstrap or self.bootstrap_treatment_coefs_ is None:
-            raise RuntimeError("Bootstrap not run. Set bootstrap=True in __init__.")
-        
-        alpha = 1 - confidence_level
-        lower_percentile = (alpha / 2) * 100
-        upper_percentile = (1 - alpha / 2) * 100
-        
-        # Treatment effect confidence interval
-        treatment_ci = np.percentile(self.bootstrap_treatment_coefs_, 
-                                   [lower_percentile, upper_percentile])
-        
-        return {
-            'treatment_effect': {
-                'lower': treatment_ci[0],
-                'upper': treatment_ci[1],
-                'mean': np.mean(self.bootstrap_treatment_coefs_),
-                'std': np.std(self.bootstrap_treatment_coefs_)
-            }
-        }
-    
-    def print_ols_results(self):
-        """Print the OLS regression results from Step 4."""
         if self.ols_results_ is None:
             raise RuntimeError("Model not fitted yet.")
-        print("=" * 60)
-        print("DOUBLE POST-LASSO RESULTS")
-        print("=" * 60)
+
+        print("\n")
         print(f"Tuning method: {self.tuning_method}")
         if self.lambda_D_ is not None:
             print(f"Lambda for D regression: {self.lambda_D_:.6f}")
@@ -325,26 +397,27 @@ class DoublePostLasso:
             print(f"Lambda for Y regression: {self.lambda_Y_:.6f}")
         
         # Show selected variables with names if available
-        if self.X_columns_ is not None:
-            selected_names = self.get_selected_variable_names()
+        names = ['intercept', 'treatment']
+        if self.X_columns_ is not None and self.selected_vars_ is not None:
+            names.extend([self.X_columns_[i] for i in self.selected_vars_])
+        else:
+            names.extend([f'X{i}' for i in self.selected_vars_])
+        selected_names = names[2:]  # Skip 'intercept' and 'treatment'
+        if selected_names is not None:
             print(f"Selected control variables: {selected_names}")
         else:
             print(f"Selected control variables (indices): {self.selected_vars_}")
         
         print(f"Number of selected control variables: {len(self.selected_vars_)}")
         
+        # Always show bootstrap CI if available
         if self.bootstrap and self.bootstrap_treatment_coefs_ is not None:
-            print(f"Bootstrap samples: {self.n_bootstrap}")
-            bootstrap_ci = self.get_bootstrap_ci()
+            bootstrap_ci = self._get_bootstrap_ci()
             print(f"Bootstrap treatment effect CI (95%): [{bootstrap_ci['treatment_effect']['lower']:.4f}, {bootstrap_ci['treatment_effect']['upper']:.4f}]")
             print(f"Bootstrap treatment effect std: {bootstrap_ci['treatment_effect']['std']:.4f}")
         
-        print("\n" + "=" * 60)
-        print("FINAL OLS REGRESSION (Step 4)")
-        print("=" * 60)
+        print("\n")
         print("Model: Y = α*D + X_selected*β + ε")
-        print("=" * 60)
-        
         # Show treatment effect prominently
         print(f"TREATMENT EFFECT (α): {self.treatment_coef_:.6f}")
         treatment_se = self.ols_results_.bse.iloc[1]  # Standard error of treatment effect
@@ -354,8 +427,6 @@ class DoublePostLasso:
         print(f"Treatment effect t-statistic: {treatment_t:.6f}")
         print(f"Treatment effect p-value: {treatment_p:.6f}")
         
-        print("\n" + "=" * 60)
-        print("FULL REGRESSION RESULTS:")
-        print("=" * 60)
+        print("\n")
         print(self.ols_results_.summary())
         return self.ols_results_ 
